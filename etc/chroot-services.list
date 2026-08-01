@@ -1,0 +1,32 @@
+# Debian chroot services to start at boot.
+# One service per line. These are script names from Debian's /etc/init.d/.
+#
+# Common services:
+#   procps          - Set kernel parameters from /etc/sysctl.conf
+#   rsyslog         - System logging daemon
+#   cron            - Task scheduler
+#   ssh             - OpenSSH server
+#   screen-cleanup  - Clean stale screen sockets
+#
+# NTP (choose one):
+#   ntpdate-debian  - One-shot time sync at boot
+#   ntpsec          - NTP daemon (requires kernel SO_TIMESTAMPNS support)
+#   openntpd        - Lightweight NTP daemon (works on older kernels)
+#
+# Mail (choose one):
+#   postfix         - Full MTA
+#   msmtpd          - Lightweight SMTP relay
+#
+# NFS (server-ap style):
+#   rpcbind         - RPC port mapper
+#   nfs-common      - NFS client utilities
+#   nfs-kernel-server - NFS server
+#
+# File sync:
+#   rsync           - rsync daemon
+
+procps
+rsyslog
+cron
+ssh
+screen-cleanup
