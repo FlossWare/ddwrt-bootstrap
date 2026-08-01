@@ -138,6 +138,30 @@ One Debian init script name per line. See the file for available options and exa
 - `examples/entware-only/` - Router running Entware without Debian chroot
 - `examples/entware-plus-debian/` - Router running Entware with Debian chroot
 
+## Separating framework from config
+
+This repo provides the generic, reusable framework scripts. For managing host-specific configurations (per-router service lists, IP addresses, custom mounts), create a separate config repo organized by hostname:
+
+```
+my-ddwrt-config/
+  router-a/
+    chroot-services.list
+    debian.sh
+    nvram-rc_startup.sh
+    nvram-rc_usb.sh
+  router-b/
+    ...
+  deploy.sh
+```
+
+The framework scripts (`dd-wrt.sh`, `entware.sh`) stay identical across routers. Only `debian.sh`, `chroot-services.list`, and the nvram scripts vary per host.
+
+## SSH access
+
+DD-WRT runs dropbear on port 2222. Recent builds (v2025.89+) only support **ed25519** keys — RSA keys will be silently rejected. Generate an ed25519 key and add it to `/tmp/mnt/sda1/dd-wrt/root/.ssh/authorized_keys` (which is bind-mounted to `/tmp/root/.ssh/` by `dd-wrt.sh`).
+
+The Debian chroot runs OpenSSH on port 22 and supports all key types.
+
 ## License
 
 MIT
