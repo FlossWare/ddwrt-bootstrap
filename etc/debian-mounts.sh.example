@@ -1,0 +1,20 @@
+# Extra mount hooks for debian.sh
+#
+# Define start_extra_mounts() and stop_extra_mounts() for host-specific
+# bind mounts that should be set up inside the Debian chroot.
+#
+# Copy this file to debian-mounts.sh and customize.
+# $CHROOT_DIR is available and points to the Debian chroot root.
+
+start_extra_mounts() {
+    # Example: mount a second USB partition as NFS exports
+    #mkdir -p ${CHROOT_DIR}/exports/media-01
+    #mount -o bind /tmp/mnt/sdb1 ${CHROOT_DIR}/exports/media-01
+    :
+}
+
+stop_extra_mounts() {
+    # Example: unmount the NFS exports
+    #umount ${CHROOT_DIR}/exports/media-01
+    :
+}

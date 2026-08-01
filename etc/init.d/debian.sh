@@ -8,7 +8,14 @@
 # Based on https://github.com/DontBeAPadavan/chroot-debian
 # 3-pass unmount from Qdebian.qpkd (qnapclub)
 
+# Defaults (overridden by dd-wrt.conf if present)
 STORAGE_DIR="/tmp/mnt/sda1"
+
+# Source host-specific config
+CONF_FILE="${STORAGE_DIR}/dd-wrt/etc/dd-wrt.conf"
+if [ -f "$CONF_FILE" ]; then
+    . "$CONF_FILE"
+fi
 
 CHROOT_DIR=$(readlink -f ${STORAGE_DIR}/debian)
 
@@ -17,6 +24,12 @@ CHROOT_SERVICES_LIST=${STORAGE_DIR}/dd-wrt/etc/chroot-services.list
 CHROOT_BIN=$(which chroot)
 
 MountedDirCount="$(/bin/mount | grep $CHROOT_DIR | wc -l)"
+
+# Source extra mount hooks if present
+EXTRA_MOUNTS="${STORAGE_DIR}/dd-wrt/etc/debian-mounts.sh"
+if [ -f "$EXTRA_MOUNTS" ]; then
+    . "$EXTRA_MOUNTS"
+fi
 
 start() {
 	if [ -f /etc/hosts ]; then
@@ -31,6 +44,11 @@ start() {
 	for dir in dev dev/pts proc sys; do
 		/bin/mount -o bind /$dir $CHROOT_DIR/$dir
 	done
+
+	# Run host-specific extra mounts (e.g., NFS exports)
+	if type start_extra_mounts >/dev/null 2>&1; then
+		start_extra_mounts
+	fi
 
 	if [ ! -e "$CHROOT_SERVICES_LIST" ]; then
 		echo 'WARNING: No Debian services defined.'
@@ -57,6 +75,11 @@ stop() {
 			LANG=C \
 			$CHROOT_BIN $CHROOT_DIR /etc/init.d/$item stop
 		done
+	fi
+
+	# Run host-specific extra unmounts
+	if type stop_extra_mounts >/dev/null 2>&1; then
+		stop_extra_mounts
 	fi
 
 	sleep 1

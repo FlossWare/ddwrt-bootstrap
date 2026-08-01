@@ -11,8 +11,15 @@
 #     entware/         - Entware package manager root (bind-mounted to /opt)
 #     debian/          - Debian chroot (optional)
 
+# Defaults (overridden by dd-wrt.conf if present)
 STORAGE_DIR="/tmp/mnt/sda1"
 LOG_FILE="/tmp/flossware.log"
+
+# Source host-specific config
+CONF_FILE="${STORAGE_DIR}/dd-wrt/etc/dd-wrt.conf"
+if [ -f "$CONF_FILE" ]; then
+    . "$CONF_FILE"
+fi
 
 log() {
     echo "---------------------------------------" 2>&1 >> ${LOG_FILE}

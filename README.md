@@ -29,7 +29,9 @@ Provides a modular init system for DD-WRT routers that:
         dd-wrt.sh           # Master orchestrator (this repo)
         entware.sh           # Entware init wrapper
         debian.sh            # Debian chroot launcher
+      dd-wrt.conf            # Host-specific config (STORAGE_DIR, LOG_FILE)
       chroot-services.list   # Services to start in Debian chroot
+      debian-mounts.sh       # Extra chroot mounts (optional)
       motd                   # Shared MOTD file
     root/                    # Shared root home directory
     var/
@@ -99,26 +101,41 @@ If you have a Debian chroot installed on the USB drive:
 
 1. Edit `dd-wrt.sh` and uncomment `startDebian` in the `start()` function
 2. Edit `etc/chroot-services.list` to list the Debian services you want
-3. Set `STORAGE_DIR` in `debian.sh` if your chroot is on a different partition
+3. Configure `STORAGE_DIR` in `dd-wrt.conf` if your chroot is on a different partition
 
 ## Configuration
 
-### dd-wrt.sh
+### dd-wrt.conf
 
-Edit the variables at the top:
+Sourced by both `dd-wrt.sh` and `debian.sh` at startup. Place in `etc/dd-wrt.conf` on the USB drive:
 
-- `STORAGE_DIR` - USB mount point (default: `/tmp/mnt/sda1`)
-- `LOG_FILE` - Log file path (default: `/tmp/flossware.log`)
+```sh
+STORAGE_DIR="/tmp/mnt/sda1"   # USB mount point (default)
+LOG_FILE="/tmp/flossware.log"  # Log file path (default)
+```
 
-### debian.sh
-
-Edit the variable at the top:
-
-- `STORAGE_DIR` - USB mount point (default: `/tmp/mnt/sda1`)
+If this file is absent, the defaults above are used.
 
 ### chroot-services.list
 
 One Debian init script name per line. See the file for available options and examples.
+
+### debian-mounts.sh (optional)
+
+Define `start_extra_mounts()` and `stop_extra_mounts()` functions for host-specific bind mounts inside the Debian chroot. Place in `etc/debian-mounts.sh` on the USB drive. See `etc/debian-mounts.sh.example`.
+
+```sh
+start_extra_mounts() {
+    mkdir -p ${CHROOT_DIR}/exports/media-01
+    mount -o bind /tmp/mnt/sdb1 ${CHROOT_DIR}/exports/media-01
+}
+
+stop_extra_mounts() {
+    umount ${CHROOT_DIR}/exports/media-01
+}
+```
+
+If this file is absent, no extra mounts are performed.
 
 ## Boot sequence
 
@@ -145,16 +162,20 @@ This repo provides the generic, reusable framework scripts. For managing host-sp
 ```
 my-ddwrt-config/
   router-a/
+    dd-wrt.conf              # STORAGE_DIR, LOG_FILE
+    chroot-services.list     # Debian services
+    nvram-rc_startup.sh      # Static IP, regulatory domain
+    nvram-rc_usb.sh          # USB mount and bootstrap
+  router-b/
+    dd-wrt.conf
     chroot-services.list
-    debian.sh
+    debian-mounts.sh         # Extra mounts (only if needed)
     nvram-rc_startup.sh
     nvram-rc_usb.sh
-  router-b/
-    ...
   deploy.sh
 ```
 
-The framework scripts (`dd-wrt.sh`, `entware.sh`) stay identical across routers. Only `debian.sh`, `chroot-services.list`, and the nvram scripts vary per host.
+All framework scripts (`dd-wrt.sh`, `debian.sh`, `entware.sh`) stay identical across routers. Only the config files vary per host.
 
 ## SSH access
 
