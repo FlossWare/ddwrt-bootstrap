@@ -15,9 +15,63 @@ Provides a modular init system for DD-WRT routers that:
 
 ## Prerequisites
 
-- DD-WRT router with USB port
+- DD-WRT router with USB port (v2025.89+ recommended for ed25519 SSH support)
 - USB drive with ext4 partition(s), labeled with `tune2fs -L`
 - [Entware](https://github.com/Entware/Entware) installed on the USB drive
+
+## Boot sequence
+
+DD-WRT executes two special nvram variables during boot:
+
+- `rc_startup`: Runs at system startup (before USB detection) for static IP configuration, regulatory domain settings, and other early boot tasks
+- `rc_usb`: Runs when USB storage is detected to mount partitions and trigger the bootstrap framework
+
+The framework then executes in this order:
+
+1. `rc_startup` runs (static IP, regulatory domain)
+2. USB storage detected, DD-WRT runs `rc_usb`
+3. `rc_usb` identifies partitions via `blkid`, mounts them, calls `dd-wrt.sh start`
+4. `dd-wrt.sh` runs in order:
+   - `startModProbe` - Load kernel modules (cifs, nfs, xfs, etc.)
+   - `startMount` - Mount local/remote filesystems
+   - `startBind` - Bind mount Entware to `/opt`, shared root home, shared MOTD
+   - Swap on
+   - `startEntware` - Run Entware's `rc.unslung`
+   - `startDebian` - Start Debian chroot services (if enabled)
+
+## Configuration
+
+### dd-wrt.conf
+
+Sourced by both `dd-wrt.sh` and `debian.sh` at startup. Place in `etc/dd-wrt.conf` on the USB drive:
+
+```sh
+STORAGE_DIR="/tmp/mnt/sda1"   # USB mount point (default)
+LOG_FILE="/tmp/flossware.log"  # Log file path (default)
+```
+
+If this file is absent, the defaults above are used.
+
+### chroot-services.list
+
+One Debian init script name per line. See the file for available options and examples.
+
+### debian-mounts.sh (optional)
+
+Define `start_extra_mounts()` and `stop_extra_mounts()` functions for host-specific bind mounts inside the Debian chroot. Place in `etc/debian-mounts.sh` on the USB drive. See `etc/debian-mounts.sh.example`.
+
+```sh
+start_extra_mounts() {
+    mkdir -p ${CHROOT_DIR}/exports/media-01
+    mount -o bind /tmp/mnt/sdb1 ${CHROOT_DIR}/exports/media-01
+}
+
+stop_extra_mounts() {
+    umount ${CHROOT_DIR}/exports/media-01
+}
+```
+
+If this file is absent, no extra mounts are performed.
 
 ## USB drive layout
 
@@ -60,7 +114,7 @@ mkdir -p /tmp/mnt/sda1/dd-wrt/root
 mkdir -p /tmp/mnt/sda1/dd-wrt/var
 mkdir -p /tmp/mnt/sda1/entware
 
-cp etc/init.d/dd-wrt.sh   /tmp/mnt/sda1/dd-wrt/etc/init.d/
+cp etc/init.d/dd-wrt.sh    /tmp/mnt/sda1/dd-wrt/etc/init.d/
 cp etc/init.d/entware.sh   /tmp/mnt/sda1/dd-wrt/etc/init.d/
 cp etc/init.d/debian.sh    /tmp/mnt/sda1/dd-wrt/etc/init.d/
 cp etc/chroot-services.list /tmp/mnt/sda1/dd-wrt/etc/
@@ -85,6 +139,8 @@ echo "Welcome to $(hostname)" > /tmp/mnt/sda1/dd-wrt/etc/motd
 
 ### 5. Set nvram scripts
 
+For Entware-only routers, use the examples in `examples/entware-only/`. For routers with a Debian chroot, use `examples/entware-plus-debian/`.
+
 ```sh
 # USB mount handler (runs when USB is detected)
 nvram set rc_usb="$(cat examples/entware-only/nvram-rc_usb.sh)"
@@ -103,52 +159,18 @@ If you have a Debian chroot installed on the USB drive:
 2. Edit `etc/chroot-services.list` to list the Debian services you want
 3. Configure `STORAGE_DIR` in `dd-wrt.conf` if your chroot is on a different partition
 
-## Configuration
+## SSH access
 
-### dd-wrt.conf
+DD-WRT runs dropbear on port 2222. Recent builds (v2025.89+) only support **ed25519** keys -- RSA keys will be silently rejected. Generate an ed25519 key with `ssh-keygen -t ed25519` and add it to `/tmp/mnt/sda1/dd-wrt/root/.ssh/authorized_keys` (which is bind-mounted to `/tmp/root/.ssh/` by `dd-wrt.sh`).
 
-Sourced by both `dd-wrt.sh` and `debian.sh` at startup. Place in `etc/dd-wrt.conf` on the USB drive:
+The Debian chroot runs OpenSSH on port 22 and supports all key types.
 
-```sh
-STORAGE_DIR="/tmp/mnt/sda1"   # USB mount point (default)
-LOG_FILE="/tmp/flossware.log"  # Log file path (default)
-```
+## Troubleshooting
 
-If this file is absent, the defaults above are used.
-
-### chroot-services.list
-
-One Debian init script name per line. See the file for available options and examples.
-
-### debian-mounts.sh (optional)
-
-Define `start_extra_mounts()` and `stop_extra_mounts()` functions for host-specific bind mounts inside the Debian chroot. Place in `etc/debian-mounts.sh` on the USB drive. See `etc/debian-mounts.sh.example`.
-
-```sh
-start_extra_mounts() {
-    mkdir -p ${CHROOT_DIR}/exports/media-01
-    mount -o bind /tmp/mnt/sdb1 ${CHROOT_DIR}/exports/media-01
-}
-
-stop_extra_mounts() {
-    umount ${CHROOT_DIR}/exports/media-01
-}
-```
-
-If this file is absent, no extra mounts are performed.
-
-## Boot sequence
-
-1. DD-WRT boots and runs `rc_startup` (static IP, regulatory domain)
-2. USB storage detected, DD-WRT runs `rc_usb`
-3. `rc_usb` labels partitions via `blkid`, mounts them, calls `dd-wrt.sh start`
-4. `dd-wrt.sh` runs in order:
-   - `startModProbe` - Load kernel modules (cifs, nfs, xfs, etc.)
-   - `startMount` - Mount local/remote filesystems
-   - `startBind` - Bind mount Entware to `/opt`, shared root home, shared MOTD
-   - Swap on
-   - `startEntware` - Run Entware's `rc.unslung`
-   - `startDebian` - Start Debian chroot services (if enabled)
+- **USB not detected**: Verify your USB drive is properly labeled and formatted as ext4. Check `dmesg` on the router for detection issues.
+- **Services not starting**: Ensure all scripts have executable permissions (`chmod +x`). Check logs in the file specified by `LOG_FILE` (default: `/tmp/flossware.log`).
+- **Chroot issues**: Verify the Debian chroot is properly installed on the USB drive and that all required bind mounts (`/dev`, `/proc`, `/sys`) are available.
+- **SSH key rejected**: Recent DD-WRT builds only support ed25519 keys. Generate one with `ssh-keygen -t ed25519` and deploy it to the router's `authorized_keys`.
 
 ## Examples
 
@@ -176,12 +198,6 @@ my-ddwrt-config/
 ```
 
 All framework scripts (`dd-wrt.sh`, `debian.sh`, `entware.sh`) stay identical across routers. Only the config files vary per host.
-
-## SSH access
-
-DD-WRT runs dropbear on port 2222. Recent builds (v2025.89+) only support **ed25519** keys — RSA keys will be silently rejected. Generate an ed25519 key and add it to `/tmp/mnt/sda1/dd-wrt/root/.ssh/authorized_keys` (which is bind-mounted to `/tmp/root/.ssh/` by `dd-wrt.sh`).
-
-The Debian chroot runs OpenSSH on port 22 and supports all key types.
 
 ## License
 
