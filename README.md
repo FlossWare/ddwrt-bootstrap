@@ -17,7 +17,9 @@ Provides a modular init system for DD-WRT routers that:
 
 - DD-WRT router with USB port (v2025.89+ recommended for ed25519 SSH support)
 - USB drive with ext4 partition(s), labeled with `tune2fs -L`
-- [Entware](https://github.com/Entware/Entware) installed on the USB drive
+- One or both of:
+  - [Entware](https://github.com/Entware/Entware) installed on the USB drive (for architectures without Debian support, e.g. MIPS)
+  - A Debian chroot on the USB drive (for architectures with Debian support, e.g. ARMv7)
 
 ## Boot sequence
 
@@ -34,9 +36,9 @@ The framework then executes in this order:
 4. `dd-wrt.sh` runs in order:
    - `startModProbe` - Load kernel modules (cifs, nfs, xfs, etc.)
    - `startMount` - Mount local/remote filesystems
-   - `startBind` - Bind mount Entware to `/opt`, shared root home, shared MOTD
+   - `startBind` - Bind mount shared root home, shared MOTD, and Entware to `/opt` (if present)
    - Swap on
-   - `startEntware` - Run Entware's `rc.unslung`
+   - `startEntware` - Run Entware's `rc.unslung` (if installed)
    - `startDebian` - Start Debian chroot services (if enabled)
 
 ## Configuration
@@ -81,8 +83,8 @@ If this file is absent, no extra mounts are performed.
     etc/
       init.d/
         dd-wrt.sh           # Master orchestrator (this repo)
-        entware.sh           # Entware init wrapper
-        debian.sh            # Debian chroot launcher
+        entware.sh           # Entware init wrapper (optional)
+        debian.sh            # Debian chroot launcher (optional)
       dd-wrt.conf            # Host-specific config (STORAGE_DIR, LOG_FILE)
       chroot-services.list   # Services to start in Debian chroot
       debian-mounts.sh       # Extra chroot mounts (optional)
@@ -90,7 +92,7 @@ If this file is absent, no extra mounts are performed.
     root/                    # Shared root home directory
     var/
       swapfile               # Swap file
-  entware/                   # Entware root (bind-mounted to /opt)
+  entware/                   # Entware root (bind-mounted to /opt, optional)
   debian/                    # Debian chroot root (optional)
 ```
 
@@ -115,9 +117,11 @@ mkdir -p /tmp/mnt/sda1/dd-wrt/var
 mkdir -p /tmp/mnt/sda1/entware
 
 cp etc/init.d/dd-wrt.sh    /tmp/mnt/sda1/dd-wrt/etc/init.d/
-cp etc/init.d/entware.sh   /tmp/mnt/sda1/dd-wrt/etc/init.d/
-cp etc/init.d/debian.sh    /tmp/mnt/sda1/dd-wrt/etc/init.d/
-cp etc/chroot-services.list /tmp/mnt/sda1/dd-wrt/etc/
+
+# Copy whichever you need (or both):
+cp etc/init.d/entware.sh   /tmp/mnt/sda1/dd-wrt/etc/init.d/   # if using Entware
+cp etc/init.d/debian.sh    /tmp/mnt/sda1/dd-wrt/etc/init.d/   # if using Debian chroot
+cp etc/chroot-services.list /tmp/mnt/sda1/dd-wrt/etc/          # if using Debian chroot
 
 chmod +x /tmp/mnt/sda1/dd-wrt/etc/init.d/*.sh
 ```
@@ -151,13 +155,19 @@ nvram set rc_startup="$(cat examples/entware-only/nvram-rc_startup.sh)"
 nvram commit
 ```
 
-### 6. Enable Debian chroot (optional)
+### 6. Enable optional components
 
-If you have a Debian chroot installed on the USB drive:
+**Entware** (for routers without Debian chroot support):
 
-1. Edit `dd-wrt.sh` and uncomment `startDebian` in the `start()` function
-2. Edit `etc/chroot-services.list` to list the Debian services you want
-3. Configure `STORAGE_DIR` in `dd-wrt.conf` if your chroot is on a different partition
+1. Install [Entware](https://github.com/Entware/Entware) on the USB drive under `entware/`
+2. Ensure `entware.sh` is copied to `etc/init.d/` and `startEntware` is uncommented in `dd-wrt.sh`
+
+**Debian chroot** (for routers with compatible CPU architecture):
+
+1. Install a Debian chroot on the USB drive under `debian/`
+2. Uncomment `startDebian` in the `start()` function of `dd-wrt.sh`
+3. Edit `etc/chroot-services.list` to list the Debian services you want
+4. Configure `STORAGE_DIR` in `dd-wrt.conf` if your chroot is on a different partition
 
 ## SSH access
 
@@ -174,8 +184,8 @@ The Debian chroot runs OpenSSH on port 22 and supports all key types.
 
 ## Examples
 
-- `examples/entware-only/` - Router running Entware without Debian chroot
-- `examples/entware-plus-debian/` - Router running Entware with Debian chroot
+- `examples/entware-only/` - Router running Entware only (e.g. MIPS routers without Debian support)
+- `examples/entware-plus-debian/` - Router running both Entware and Debian chroot
 
 ## Separating framework from config
 
